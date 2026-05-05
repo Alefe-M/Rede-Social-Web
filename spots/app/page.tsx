@@ -1,5 +1,5 @@
 // Importamos o componente que acabamos de criar
-import LocalCard from "../components/LocalCard";
+import LocalCard from "../components/Feed/LocalCard";
 
 export default function HomePage() {
   return (
