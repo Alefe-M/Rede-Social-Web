@@ -1,12 +1,10 @@
 
-
-
 export default function Header(){
     return(
 
-        <Header>
+        <header>
             <h3>SpotS</h3>
-        </Header>
+        </header>
 
     );
 
