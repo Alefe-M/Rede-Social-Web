@@ -1,5 +1,3 @@
-// Importamos o componente que acabamos de criar
-
 import Header from '@/components/Ui/Header';
 
 export default function HomePage() {
@@ -9,7 +7,7 @@ export default function HomePage() {
     <Header/>
 
     <main>
-      <h1>Teste</h1>
+      <h1>Página principal do SpotS</h1>
     </main>
 
     </>
