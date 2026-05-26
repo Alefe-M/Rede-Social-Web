@@ -5,22 +5,27 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0d0101;
-    --foreground: #ffffff;
+    /* O conflito do Git foi resolvido mantendo as cores reais de dark mode */
+    --background: #0a0a0a;
+    --foreground: #ededed;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  /* Fallbacks seguros adicionados caso as variáveis da fonte Geist falhem */
+  --font-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    /* O Tailwind já aplica a fonte sans por padrão, mas você pode reforçar aqui se necessário */
+    font-family: var(--font-sans);
+  }
 }
