@@ -48,6 +48,41 @@ export async function signin(credentials: SignInCredentials): Promise<SignInResp
 }
 
 /**
+ * Cria um novo usuário no Supabase com email e senha
+ * @param credentials - Email e senha do usuário
+ * @returns Resposta com sucesso ou erro
+ */
+export async function signup(credentials: SignInCredentials): Promise<SignInResponse> {
+  try {
+    const supabase = createClient();
+
+    const { data, error } = await supabase.auth.signUp({
+      email: credentials.email,
+      password: credentials.password,
+    });
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: true,
+      user: data.user,
+      session: data.session,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
  * Realiza logout do usuário
  * @returns Resposta com sucesso ou erro
  */

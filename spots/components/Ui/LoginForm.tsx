@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { signin } from '@/utils/supabase/auth';
+import { signin, signup } from '@/utils/supabase/auth';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
@@ -10,21 +10,31 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // ESTADO NOVO: Controla se a tela é de Login (true) ou Cadastro (false)
+  const [isLogin, setIsLogin] = useState(true);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setSuccess(false);
 
-    const result = await signin({ email, password });
+    let result;
+
+    // LÓGICA NOVA: Decide qual função chamar baseado na tela atual
+    if (isLogin) {
+      result = await signin({ email, password });
+    } else {
+      result = await signup({ email, password });
+    }
 
     if (result.success) {
       setSuccess(true);
       setEmail('');
       setPassword('');
-      console.log('Login realizado com sucesso!', result.user);
+      console.log(isLogin ? 'Login realizado com sucesso!' : 'Conta criada com sucesso!', result.user);
     } else {
-      setError(result.error || 'Erro ao fazer login');
+      setError(result.error || (isLogin ? 'Erro ao fazer login' : 'Erro ao criar conta'));
     }
 
     setLoading(false);
@@ -83,7 +93,7 @@ export default function LoginForm() {
 
         {success && (
           <div style={{ color: 'green', marginBottom: '15px', padding: '10px', backgroundColor: '#e0ffe0', borderRadius: '4px' }}>
-            Login realizado com sucesso!
+            {isLogin ? 'Login realizado com sucesso!' : 'Conta criada com sucesso!'}
           </div>
         )}
 
@@ -101,9 +111,35 @@ export default function LoginForm() {
             fontSize: '16px'
           }}
         >
-          {loading ? 'Fazendo login...' : 'Login'}
+          {loading ? 'Aguarde...' : isLogin ? 'Entrar' : 'Criar Conta'}
         </button>
       </form>
+
+      {/* BOTÃO NOVO: Fica abaixo do formulário e alterna a tela */}
+      <div style={{ marginTop: '20px', textAlign: 'center' }}>
+        <span style={{ fontSize: '14px', color: '#666' }}>
+          {isLogin ? 'Ainda não tem uma conta? ' : 'Já tem uma conta? '}
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setIsLogin(!isLogin); // Inverte o valor de isLogin
+            setError(null);       // Limpa erros ao trocar de tela
+            setSuccess(false);    // Limpa mensagens de sucesso
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#007bff',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            padding: 0,
+            fontSize: '14px'
+          }}
+        >
+          {isLogin ? 'Crie uma agora' : 'Faça login'}
+        </button>
+      </div>
     </div>
   );
 }
