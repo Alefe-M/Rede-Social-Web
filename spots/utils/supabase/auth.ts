@@ -8,8 +8,8 @@ export interface SignInCredentials {
 export interface SignInResponse {
   success: boolean;
   error?: string;
-  user?: any;
-  session?: any;
+  user?: unknown;
+  session?: unknown;
 }
 
 /**
