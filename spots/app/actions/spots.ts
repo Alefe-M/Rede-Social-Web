@@ -30,7 +30,7 @@ export async function getPosts(): Promise<Post[] | null> {
   const { data, error } = await supabase
     .from('Posts')
     .select('*')
-    .order('name', { ascending: true })
+    .order('createdAt', { ascending: true })
 
   if (error) {
     console.error('Erro ao buscar os Posts: ', error.message)
