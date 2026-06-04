@@ -4,14 +4,22 @@ import { createClient } from '@supabase/supabase-js'
 export interface Post {
   id?: string
   userId: string
-  name: string
-  imagem: string
-  data: string
+  user: string,
+  username: string,
+  profileUrl: string,
+  place: string,
+  placeUrl: string,
+  category: string,
+  location: string,
+  image: string,
+  caption: string,
+  likes: number,
+  comments: number,
 }
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnxehjgzbpfcyrurtpba.supabase.co',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_h5rHJoyNwaAi7cHnJj-F3g_-Z6-VoRw'
 )
 
 // ==========================================
