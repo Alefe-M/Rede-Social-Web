@@ -1,27 +1,27 @@
-import { createClient } from './client';
+import { createClient } from './client'; // 1. CORREÇÃO: Importa o createClient do seu arquivo client.ts
 
+// 2. CORREÇÃO: Garante que a interface de Login existe no arquivo
 export interface SignInCredentials {
   email: string;
   password: string;
 }
 
-// 1. MUDANÇA: Criamos uma interface nova para o Cadastro, que inclui nome e sobrenome
+// Interface de Cadastro estendendo a de Login + os campos do plano do Spots
 export interface SignUpCredentials extends SignInCredentials {
-  nome?: string;
-  sobrenome?: string;
+  nome: string;
+  sobrenome: string;
+  username: string; // Essencial para as rotas dinâmicas do perfil
 }
 
 export interface SignInResponse {
   success: boolean;
   error?: string;
-  user?: any; // Usando any ou o tipo correto do Supabase User no lugar de unknown facilita acessar os metadados depois
+  user?: any; 
   session?: any;
 }
 
 /**
  * Realiza login com email e senha no Supabase
- * @param credentials - Email e senha do usuário
- * @returns Resposta com sucesso ou erro
  */
 export async function signin(credentials: SignInCredentials): Promise<SignInResponse> {
   try {
@@ -44,11 +44,8 @@ export async function signin(credentials: SignInCredentials): Promise<SignInResp
 }
 
 /**
- * Cria um novo usuário no Supabase com email, senha, nome e sobrenome
- * @param credentials - Dados de cadastro
- * @returns Resposta com sucesso ou erro
+ * Cria um novo usuário no Supabase com email, senha, nome, sobrenome e username
  */
-// 2. MUDANÇA: Usamos SignUpCredentials aqui
 export async function signup(credentials: SignUpCredentials): Promise<SignInResponse> {
   try {
     const supabase = createClient();
@@ -56,11 +53,11 @@ export async function signup(credentials: SignUpCredentials): Promise<SignInResp
     const { data, error } = await supabase.auth.signUp({
       email: credentials.email,
       password: credentials.password,
-      // 3. MUDANÇA: Salvando nome e sobrenome nos metadados do Supabase!
       options: {
         data: {
           name: credentials.nome, 
           sobrenome: credentials.sobrenome,
+          username: credentials.username.toLowerCase().trim(), // Limpa espaços e joga pra minúsculo
         }
       }
     });
@@ -78,7 +75,6 @@ export async function signup(credentials: SignUpCredentials): Promise<SignInResp
 
 /**
  * Realiza logout do usuário
- * @returns Resposta com sucesso ou erro
  */
 export async function signout(): Promise<SignInResponse> {
   try {
@@ -98,7 +94,6 @@ export async function signout(): Promise<SignInResponse> {
 
 /**
  * Obtém a sessão atual do usuário
- * @returns Dados da sessão ou nulo
  */
 export async function getSession() {
   try {
@@ -113,7 +108,6 @@ export async function getSession() {
 
 /**
  * Obtém o usuário autenticado atual
- * @returns Dados do usuário ou nulo
  */
 export async function getCurrentUser() {
   try {

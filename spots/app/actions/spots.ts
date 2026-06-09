@@ -3,23 +3,23 @@ import { createClient } from '@supabase/supabase-js'
 
 export interface Post {
   id?: string
-  userId: string
-  user: string,
-  username: string,
-  profileUrl: string,
-  place: string,
-  placeUrl: string,
-  category: string,
-  location: string,
-  image: string,
-  caption: string,
-  likes: number,
-  comments: number,
+  userId: string        
+  username?: string      
+  avatarUrl?: string    
+  location: string      // cidade_estado
+  place: string         // endereco_detalhado (Nome do local/endereço digitado)
+  category: string      // categoria
+  imageUrl: string      // imagem_url 
+  content: string       // conteudo 
+  rating: number        // nota (🌟 Nova propriedade de 1 a 5 estrelas)
+  likes: number
+  comments: number
+  createdAt?: string    // criado_em
 }
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnxehjgzbpfcyrurtpba.supabase.co',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_h5rHJoyNwaAi7cHnJj-F3g_-Z6-VoRw'
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 )
 
 // ==========================================
@@ -28,81 +28,200 @@ const supabase = createClient(
 
 export async function getPosts(): Promise<Post[] | null> {
   const { data, error } = await supabase
-    .from('Posts')
+    .from('spots') 
     .select('*')
-    .order('createdAt', { ascending: true })
+    .order('criado_em', { ascending: false }) 
 
   if (error) {
-    console.error('Erro ao buscar os Posts: ', error.message)
+    console.error('Error fetching posts: ', error.message)
     return null
   }
 
-  return data as Post[]
+  return data.map((item: any) => ({
+    id: item.id,
+    userId: item.usuario_id,
+    location: item.cidade_estado,
+    place: item.endereco_detalhado,
+    category: item.categoria,
+    imageUrl: item.imagem_url,
+    content: item.conteudo,
+    rating: item.nota || 5, // Garante um fallback caso a coluna esteja nula
+    likes: item.likes,
+    comments: item.comments,
+    createdAt: item.criado_em
+  }))
 }
 
-// Corrigido para retornar apenas um Post (ou null), já que usa .single()
-export async function getPostsById(id: string): Promise<Post | null> {
+export async function getPostById(id: string): Promise<Post | null> {
   const { data, error } = await supabase
-    .from('Posts')
+    .from('spots')
     .select('*')
     .eq('id', id)
     .single()
 
   if (error) {
-    console.error(`Erro ao buscar o Post ${id}: `, error.message)
+    console.error(`Error fetching post ${id}: `, error.message)
     return null
   }
-  return data as Post
+
+  return {
+    id: data.id,
+    userId: data.usuario_id,
+    location: data.cidade_estado,
+    place: data.endereco_detalhado,
+    category: data.categoria,
+    imageUrl: data.imagem_url,
+    content: data.conteudo,
+    rating: data.nota || 5,
+    likes: data.likes,
+    comments: data.comments,
+    createdAt: data.criado_em
+  }
 }
 
 // ==========================================
 // Setters
 // ==========================================
 
-// Corrigido para retornar um único Post em vez de uma lista (Post[]), já que usa .single()
-export async function createPost(newPost: Post): Promise<Post | null> {
+export async function createPost(newPost: Omit<Post, 'userId' | 'likes' | 'comments'>): Promise<Post | null> {
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    console.error('User not authenticated')
+    return null
+  }
+
+  const dbRow = {
+    endereco_detalhado: newPost.place,
+    categoria: newPost.category,
+    cidade_estado: newPost.location,
+    conteudo: newPost.content,   
+    imagem_url: newPost.imageUrl, 
+    nota: newPost.rating,         // 🌟 Enviando a nota para a coluna do banco
+    usuario_id: user.id, 
+    likes: 0,
+    comments: 0
+  }
+
   const { data, error } = await supabase
-    .from('Posts')
-    .insert([newPost])
+    .from('spots')
+    .insert([dbRow])
     .select()
     .single()
 
   if (error) {
-    console.error('Erro ao criar novo Post: ', error.message)
+    console.error('Error creating post: ', error.message)
     return null
   }
-  return data as Post
+
+  return {
+    id: data.id,
+    userId: data.usuario_id,
+    location: data.cidade_estado,
+    place: data.endereco_detalhado,
+    category: data.categoria,
+    imageUrl: data.imagem_url,
+    content: data.conteudo,
+    rating: data.nota,
+    likes: data.likes,
+    comments: data.comments,
+    createdAt: data.criado_em
+  }
 }
 
 export async function updatePost(id: string, updates: Partial<Post>): Promise<Post | null> {
+  const dbUpdates: any = {}
+  if (updates.place !== undefined) dbUpdates.endereco_detalhado = updates.place
+  if (updates.category !== undefined) dbUpdates.categoria = updates.category
+  if (updates.location !== undefined) dbUpdates.cidade_estado = updates.location
+  if (updates.content !== undefined) dbUpdates.conteudo = updates.content
+  if (updates.imageUrl !== undefined) dbUpdates.imagem_url = updates.imageUrl
+  if (updates.rating !== undefined) dbUpdates.nota = updates.rating // Permite atualizar a nota
+
   const { data, error } = await supabase
-    .from('Posts')
-    .update(updates)
-    .eq('id', id) // Corrigida a sintaxe do .eq()
+    .from('spots')
+    .update(dbUpdates)
+    .eq('id', id)
     .select()
     .single()
 
   if (error) {
-    console.error('Erro ao atualizar o Post: ', error.message)
+    console.error('Error updating post: ', error.message)
     return null
   }
-  return data as Post
+
+  return {
+    id: data.id,
+    userId: data.usuario_id,
+    location: data.cidade_estado,
+    place: data.endereco_detalhado,
+    category: data.categoria,
+    imageUrl: data.imagem_url,
+    content: data.conteudo,
+    rating: data.nota,
+    likes: data.likes,
+    comments: data.comments,
+    createdAt: data.criado_em
+  }
 }
 
 // ==========================================
 // Delete
 // ==========================================
 
-// Ajustado "Boolean" para "boolean" minúsculo (padrão do TypeScript)
 export async function deletePost(id: string): Promise<boolean> {
   const { error } = await supabase
-    .from('Posts')
+    .from('spots')
     .delete()
     .eq('id', id)
 
   if (error) {
-    console.error(`Erro ao deletar o Post ${id}: `, error.message)
+    console.error(`Error deleting post ${id}: `, error.message)
     return false
   }
   return true
+}
+
+export async function getPostsWithProfiles(): Promise<Post[] | null> {
+  const { data, error } = await supabase
+    .from('spots')
+    .select(`
+      id,
+      cidade_estado,
+      endereco_detalhado,
+      categoria,
+      imagem_url,
+      conteudo,
+      nota,
+      likes,
+      comments,
+      criado_em,
+      usuario_id,
+      perfis (
+        username,
+        avatar_url
+      )
+    `)
+    .order('criado_em', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching posts with profiles:', error.message)
+    return null
+  }
+
+  return data.map((item: any) => ({
+    id: item.id,
+    userId: item.usuario_id,
+    location: item.cidade_estado,
+    place: item.endereco_detalhado,
+    category: item.categoria,
+    imageUrl: item.imagem_url,
+    content: item.conteudo,
+    rating: item.nota || 5,
+    likes: item.likes,
+    comments: item.comments,
+    createdAt: item.criado_em,
+    username: item.perfis?.username,
+    avatarUrl: item.perfis?.avatar_url
+  }))
 }

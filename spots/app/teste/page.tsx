@@ -4,28 +4,37 @@ import { useState } from 'react'
 import { createPost, deletePost, getPosts, updatePost, Post } from '@/app/actions/spots'
 
 export default function TesteFormularioPost() {
-  // 1. Estados para os campos do Formulário Híbrido (Criar / Editar)
   const [place, setPlace] = useState('')
   const [category, setCategory] = useState('Restaurante')
   const [location, setLocation] = useState('Goiânia, GO')
-  const [caption, setCaption] = useState('')
-  const [image, setImage] = useState('https://picsum.photos/400/300')
+  const [content, setContent] = useState('')
+  const [imageUrl, setImageUrl] = useState('https://picsum.photos/400/300')
+  const [rating, setRating] = useState<number>(5) // 🌟 Estado da avaliação (Padrão 5 estrelas)
 
-  // 🌟 O ESTADO CHAVE: Se tiver um ID aqui, o formulário vira "Modo Edição". Se for null, "Modo Criação".
-  const [idSendoEditado, setIdSendoEditado] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteId, setDeleteId] = useState('')
+  const [postsList, setPostsList] = useState<Post[]>([])
+  
+  const [formStatus, setFormStatus] = useState('')
+  const [deleteStatus, setDeleteStatus] = useState('')
+  const [listStatus, setListStatus] = useState('')
 
-  // 2. Estado para DELETAR o Post
-  const [idParaDeletar, setIdParaDeletar] = useState('')
+  const [registeredLocations] = useState<string[]>([
+    'Goiânia, GO',
+    'Aparecida de Goiânia, GO',
+    'Senador Canedo, GO',
+    'Brasília, DF',
+    'São Paulo, SP',
+    'Rio de Janeiro, RJ'
+  ])
 
-  // 3. Estado para LISTAR os Posts
-  const [listaDePosts, setListaDePosts] = useState<Post[]>([])
+  const [searchLocation, setSearchLocation] = useState('Goiânia, GO')
+  const [showDropdown, setShowDropdown] = useState(false)
 
-  // 4. Estados de aviso/status
-  const [statusFormulario, setStatusFormulario] = useState('') // Status do formulário principal
-  const [statusDeletar, setStatusDeletar] = useState('')
-  const [statusListar, setStatusListar] = useState('')
+  const filteredLocations = registeredLocations.filter(local =>
+    local.toLowerCase().includes(searchLocation.toLowerCase())
+  )
 
-  // --- ESTILOS COMPARTILHADOS ---
   const cardStyle: React.CSSProperties = {
     color: '#222222',
     background: '#ffffff',
@@ -68,140 +77,114 @@ export default function TesteFormularioPost() {
     marginTop: '10px'
   })
 
-  // --- FUNÇÃO PARA PEGAR OS DADOS DA LISTA E JOGAR NO FORMULÁRIO ---
-  const handleCarregarParaEdicao = (post: Post) => {
+  const handleLoadForEdit = (post: Post) => {
     if (!post.id) return
     
-    setIdSendoEditado(post.id) // Banco agora sabe quem estamos editando
+    setEditingId(post.id)
     setPlace(post.place)
     setCategory(post.category)
     setLocation(post.location)
-    setCaption(post.caption)
-    setImage(post.image)
-    setStatusFormulario(`✏️ Editando o post ID: ${post.id}`)
-
-    // Faz a tela rolar suavemente de volta para o topo (onde está o formulário)
+    setContent(post.content)     
+    setImageUrl(post.imageUrl)   
+    setRating(post.rating)       // Carrega a nota para edição
+    setSearchLocation(post.location) 
+    
+    setFormStatus(`✏️ Editing post ID: ${post.id}`)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // --- FUNÇÃO PARA LIMPAR O FORMULÁRIO ---
-  const limparFormulario = () => {
-    setIdSendoEditado(null)
+  const handleClearForm = () => {
+    setEditingId(null)
     setPlace('')
     setCategory('Restaurante')
     setLocation('Goiânia, GO')
-    setCaption('')
-    setImage('https://picsum.photos/400/300')
+    setContent('')
+    setImageUrl('https://picsum.photos/400/300')
+    setRating(5)
+    setSearchLocation('Goiânia, GO')
   }
 
-  // --- FUNÇÃO DO SUBMIT (CRIA OU EDITA) ---
-  const handleSubmeterFormulario = async (e: React.FormEvent) => {
+  const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (idSendoEditado) {
-      // 📝 MODO EDIÇÃO (UPDATE)
-      setStatusFormulario('Atualizando dados no Supabase...')
-      
-      const camposAlterados: Partial<Post> = {
-        place,
-        category,
-        location,
-        caption,
-        image
-      }
+    const postData = {
+      place,
+      category,
+      location,
+      content,
+      imageUrl,
+      rating // Incluído no payload de envio
+    }
 
-      const resultado = await updatePost(idSendoEditado, camposAlterados)
-      if (resultado) {
-        setStatusFormulario(`✨ Sucesso! O post ${idSendoEditado} foi atualizado!`)
-        limparFormulario()
-        handleListar() // Recarrega a lista lá embaixo automaticamente com os dados novos!
+    if (editingId) {
+      setFormStatus('Updating data on Supabase...')
+      const result = await updatePost(editingId, postData)
+      if (result) {
+        setFormStatus(`✨ Success! Post ${editingId} updated!`)
+        handleClearForm()
+        handleList()
       } else {
-        setStatusFormulario('❌ Erro ao atualizar o post.')
+        setFormStatus('❌ Error updating post.')
       }
-
     } else {
-      // ➕ MODO CRIAÇÃO (INSERT)
-      setStatusFormulario('Enviando para o banco...')
-
-      const dadosDoPost: Post = {
-        id: Math.floor(Math.random() * 1000000).toString(),
-        userId: "1",
-        user: "Testador CodeWave",
-        username: "testador_codewave",
-        profileUrl: "https://avatar.iran.liara.run/public/30",
-        place: place,
-        placeUrl: "https://maps.google.com",
-        category: category,
-        location: location,
-        image: image,
-        caption: caption,
-        likes: 0,
-        comments: 0
-      }
-
-      const resultado = await createPost(dadosDoPost)
-      if (resultado) {
-        setStatusFormulario(`✅ Criado com sucesso! ID: ${resultado.id}`)
-        limparFormulario()
-        handleListar() // Atualiza a lista na hora
+      setFormStatus('Sending to database...')
+      const result = await createPost(postData)
+      if (result) {
+        setFormStatus(`✅ Created successfully! ID: ${result.id}`)
+        handleClearForm()
+        handleList()
       } else {
-        setStatusFormulario('❌ Erro ao criar post no Supabase.')
+        setFormStatus('❌ Error creating post. Make sure you are logged in.')
       }
     }
   }
 
-  // --- FUNÇÃO DE DELETAR ---
-  const handleDeletar = async (e: React.FormEvent) => {
+  const handleDelete = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!idParaDeletar) {
-      setStatusDeletar('⚠️ Digite um ID primeiro!')
+    if (!deleteId) {
+      setDeleteStatus('⚠️ Type an ID first!')
       return
     }
-
-    setStatusDeletar('Apagando do banco...')
-    const deuCerto = await deletePost(idParaDeletar)
-
-    if (deuCerto) {
-      setStatusDeletar(`💥 Sucesso! O post ${idParaDeletar} foi apagado!`)
-      setIdParaDeletar('')
-      handleListar() // Atualiza a lista tirando o post deletado
+    setDeleteStatus('Deleting from database...')
+    const success = await deletePost(deleteId)
+    if (success) {
+      setDeleteStatus(`💥 Success! Post ${deleteId} deleted!`)
+      if (deleteId === editingId) handleClearForm()
+      setDeleteId('')
+      handleList()
     } else {
-      setStatusDeletar('❌ Erro ao deletar. Verifique se o ID existe.')
+      setDeleteStatus('❌ Error deleting post.')
     }
   }
 
-  // --- FUNÇÃO DE LISTAR ---
-  const handleListar = async () => {
-    setStatusListar('Buscando dados no Supabase...')
+  const handleList = async () => {
+    setListStatus('Fetching data from Supabase...')
     const posts = await getPosts()
-
     if (posts) {
-      setListaDePosts(posts)
-      setStatusListar(`✅ Sucesso! Encontrados ${posts.length} posts no banco.`)
+      setPostsList(posts)
+      setListStatus(`✅ Success! Found ${posts.length} posts.`)
     } else {
-      setStatusListar('❌ Erro ao buscar os posts do banco.')
+      setListStatus('❌ Error fetching posts.')
     }
   }
 
   return (
     <div style={{ maxWidth: '480px', margin: '50px auto', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', gap: '35px', padding: '0 20px' }}>
       
-      {/* CARD 1: FORMULÁRIO DINÂMICO (CRIAR OU EDITAR) */}
-      <div style={{ ...cardStyle, border: idSendoEditado ? '2px solid #f59e0b' : '1px solid #e3e0e0' }}>
-        
-        {/* O título muda dinamicamente baseando-se no modo atual */}
-        <h2 style={{ margin: '0 0 10px 0', color: idSendoEditado ? '#f59e0b' : '#0070f3' }}>
-          {idSendoEditado ? '✏️ Modo Edição: Alterar Post' : '➕ Testar: Criar Post'}
+      {/* CARD 1: CREATE / EDIT */}
+      <div style={{ ...cardStyle, border: editingId ? '2px solid #f59e0b' : '1px solid #e3e0e0' }}>
+        <h2 style={{ margin: '0 0 10px 0', color: editingId ? '#f59e0b' : '#0070f3' }}>
+          {editingId ? '✏️ Edit Mode: Change Post' : '➕ Test: Create Post'}
         </h2>
         
-        <form onSubmit={handleSubmeterFormulario} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <form onSubmit={handleSubmitForm} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
-            <label style={labelStyle}>Nome do Lugar:</label>
-            <input type="text" placeholder="Ex: Café Central" value={place} onChange={(e) => setPlace(e.target.value)} required style={inputStyle} />
+            <label style={labelStyle}>Place Name / Address:</label>
+            <input type="text" placeholder="Ex: Central Café - Av. T-10, Setor Bueno" value={place} onChange={(e) => setPlace(e.target.value)} required style={inputStyle} />
           </div>
 
           <div>
-            <label style={labelStyle}>Categoria:</label>
+            <label style={labelStyle}>Category:</label>
             <select value={category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
               <option value="Restaurante">Restaurante</option>
               <option value="Cafeteria">Cafeteria</option>
@@ -210,123 +193,144 @@ export default function TesteFormularioPost() {
             </select>
           </div>
 
+          <div style={{ position: 'relative' }}>
+            <label style={labelStyle}>City / State:</label>
+            <input 
+              type="text" 
+              placeholder="Type to filter..." 
+              value={searchLocation} 
+              onChange={(e) => {
+                setSearchLocation(e.target.value)
+                setLocation(e.target.value)
+                setShowDropdown(true)
+              }} 
+              onFocus={() => setShowDropdown(true)} 
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+              required 
+              style={inputStyle} 
+            />
+
+            {showDropdown && filteredLocations.length > 0 && (
+              <ul style={{
+                position: 'absolute', top: '100%', left: 0, right: 0,
+                background: 'white', border: '1px solid #cccccc', borderRadius: '6px',
+                maxHeight: '150px', overflowY: 'auto', margin: '4px 0 0 0', padding: 0,
+                listStyle: 'none', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+              }}>
+                {filteredLocations.map((item, index) => (
+                  <li 
+                    key={index}
+                    onClick={() => {
+                      setSearchLocation(item)
+                      setLocation(item)
+                      setShowDropdown(false)
+                    }}
+                    style={{ padding: '10px', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontSize: '14px', color: '#444' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#f4f4f5'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
+                  >
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* 🌟 SISTEMA DE RATING (ESTRELAS) */}
           <div>
-            <label style={labelStyle}>Localização (Cidade/Estado):</label>
-            <input type="text" placeholder="Ex: Goiânia, GO" value={location} onChange={(e) => setLocation(e.target.value)} required style={inputStyle} />
+            <label style={labelStyle}>Your Rating:</label>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                  key={star}
+                  onClick={() => setRating(star)}
+                  style={{
+                    fontSize: '28px',
+                    cursor: 'pointer',
+                    color: star <= rating ? '#f59e0b' : '#d1d5db',
+                    transition: 'color 0.1s ease'
+                  }}
+                >
+                  ★
+                </span>
+              ))}
+            </div>
           </div>
 
           <div>
-            <label style={labelStyle}>Legenda / Comentário:</label>
-            <input type="text" placeholder="O que você achou do espaço?" value={caption} onChange={(e) => setCaption(e.target.value)} required style={inputStyle} />
+            <label style={labelStyle}>Content (Caption):</label>
+            <input type="text" placeholder="What did you think of the place?" value={content} onChange={(e) => setContent(e.target.value)} required style={inputStyle} />
           </div>
 
           <div>
-            <label style={labelStyle}>URL da Imagem:</label>
-            <input type="text" value={image} onChange={(e) => setImage(e.target.value)} required style={inputStyle} />
+            <label style={labelStyle}>Image URL:</label>
+            <input type="text" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} required style={inputStyle} />
           </div>
 
-          {/* O botão também muda de cor e texto dependendo do que estamos fazendo */}
-          <button type="submit" style={buttonStyle(idSendoEditado ? '#f59e0b' : '#0070f3')}>
-            {idSendoEditado ? 'Atualizar no Supabase' : 'Salvar no Supabase'}
+          <button type="submit" style={buttonStyle(editingId ? '#f59e0b' : '#0070f3')}>
+            {editingId ? 'Update on Supabase' : 'Save to Supabase'}
           </button>
 
-          {/* Se estiver editando, mostra um botão extra para desistir e voltar ao modo de criar */}
-          {idSendoEditado && (
-            <button type="button" onClick={limparFormulario} style={{ ...buttonStyle('#6b7280'), marginTop: '0' }}>
-              Cancelar Edição
+          {editingId && (
+            <button type="button" onClick={handleClearForm} style={{ ...buttonStyle('#6b7280'), marginTop: '0' }}>
+              Cancel Edit
             </button>
           )}
         </form>
         
-        {statusFormulario && (
+        {formStatus && (
           <p style={{ background: '#f4f4f5', padding: '12px', fontSize: '13px', borderRadius: '6px', margin: '10px 0 0 0', border: '1px solid #e4e4e7', wordBreak: 'break-word' }}>
-            {statusFormulario}
+            {formStatus}
           </p>
         )}
       </div>
 
-      {/* CARD 2: DELETAR POST */}
+      {/* CARD 2: DELETE */}
       <div style={cardStyle}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#e03131' }}>🗑️ Testar: Deletar Post</h2>
-        
-        <form onSubmit={handleDeletar} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <h2 style={{ margin: '0 0 10px 0', color: '#e03131' }}>🗑️ Test: Delete Post</h2>
+        <form onSubmit={handleDelete} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
-            <label style={labelStyle}>ID do Post no Banco:</label>
-            <input type="text" placeholder="Cole aqui o ID" value={idParaDeletar} onChange={(e) => setIdParaDeletar(e.target.value)} required style={inputStyle} />
+            <label style={labelStyle}>Post ID:</label>
+            <input type="text" placeholder="Paste ID here" value={deleteId} onChange={(e) => setDeleteId(e.target.value)} required style={inputStyle} />
           </div>
-
-          <button type="submit" style={buttonStyle('#e03131')}>Deletar do Supabase</button>
+          <button type="submit" style={buttonStyle('#e03131')}>Delete from Supabase</button>
         </form>
-        
-        {statusDeletar && (
+        {deleteStatus && (
           <p style={{ background: '#f4f4f5', padding: '12px', fontSize: '13px', borderRadius: '6px', margin: '10px 0 0 0', border: '1px solid #e4e4e7', wordBreak: 'break-word' }}>
-            {statusDeletar}
+            {deleteStatus}
           </p>
         )}
       </div>
 
-      {/* CARD 3: LISTAR POSTS + BOTÃO EDITAR INTEGRADO */}
+      {/* CARD 3: LIST */}
       <div style={cardStyle}>
-        <h2 style={{ margin: '0 0 10px 0', color: '#10b981' }}>🔍 Testar: Listar Posts</h2>
-        
-        <p style={{ margin: 0, fontSize: '14px', color: '#666666' }}>
-          Clique no botão abaixo para rodar sua função <strong>getPosts()</strong>.
-        </p>
-
-        <button type="button" onClick={handleListar} style={buttonStyle('#10b981')}>
-          Buscar Dados do Banco
+        <h2 style={{ margin: '0 0 10px 0', color: '#10b981' }}>🔍 Test: List Posts</h2>
+        <button type="button" onClick={handleList} style={buttonStyle('#10b981')}>
+          Fetch Database Records
         </button>
-        
-        {statusListar && (
+        {listStatus && (
           <p style={{ background: '#f4f4f5', padding: '12px', fontSize: '13px', borderRadius: '6px', margin: '10px 0 0 0', border: '1px solid #e4e4e7', wordBreak: 'break-word' }}>
-            {statusListar}
+            {listStatus}
           </p>
         )}
-
-        {listaDePosts.length > 0 && (
+        {postsList.length > 0 && (
           <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '5px' }}>
-            <label style={labelStyle}>Resultados da Tabela ({listaDePosts.length}):</label>
-            {listaDePosts.map((post) => (
-              <div 
-                key={post.id} 
-                style={{ 
-                  padding: '12px', 
-                  border: '1px solid #e4e4e7', 
-                  borderRadius: '6px', 
-                  fontSize: '13px', 
-                  background: '#fafafa',
-                  lineHeight: '1.4',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '5px'
-                }}
-              >
+            {postsList.map((post) => (
+              <div key={post.id} style={{ padding: '12px', border: '1px solid #e4e4e7', borderRadius: '6px', fontSize: '13px', background: '#fafafa', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                 <div>
                   <span style={{ color: '#0070f3', fontWeight: 'bold' }}>ID:</span> {post.id} <br />
-                  <span style={{ fontWeight: 'bold' }}>Lugar:</span> {post.place} ({post.category}) <br />
-                  <span style={{ fontWeight: 'bold' }}>Legenda:</span> {post.caption}
+                  <span style={{ fontWeight: 'bold' }}>Place:</span> {post.place} ({post.category}) <br />
+                  {/* 🌟 Renderizando as estrelas salvas do banco de dados */}
+                  <span style={{ fontWeight: 'bold' }}>Rating:</span> <span style={{ color: '#f59e0b', fontSize: '14px' }}>{'★'.repeat(post.rating)}{'☆'.repeat(5 - post.rating)}</span> ({post.rating}/5) <br />
+                  <span style={{ fontWeight: 'bold' }}>Content:</span> {post.content}
                 </div>
-
-                {/* ✨ O BOTÃO DE EDITAR QUE VOCÊ QUERIA AQUI NO MAP ✨ */}
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => handleCarregarParaEdicao(post)}
-                    style={{
-                      background: '#f59e0b',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      padding: '6px 12px',
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      marginTop: '5px'
-                    }}
-                  >
-                    ✏️ Editar este Post
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleLoadForEdit(post)}
+                  style={{ background: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px', padding: '6px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', width: 'fit-content' }}
+                >
+                  ✏️ Edit Post
+                </button>
               </div>
             ))}
           </div>
