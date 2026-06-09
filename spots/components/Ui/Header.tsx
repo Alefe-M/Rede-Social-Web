@@ -4,30 +4,28 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signout } from "@/utils/supabase/auth";
-import { createClient } from "@/utils/supabase/client"; // Importado para consultar o banco
+import { createClient } from "@/utils/supabase/client";
 import toast from "react-hot-toast";
 import { MapPin, User, LogOut } from "lucide-react";
+import SearchInput from "@/components/Ui/SearchInput"; 
 
 export default function Header() {
   const router = useRouter();
   const supabase = createClient();
   
-  // Estados para guardar o username do usuário logado e controlar o carregamento
   const [username, setUsername] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
   useEffect(() => {
     async function fetchUserProfile() {
-      // 1. Busca o usuário autenticado no Supabase Auth
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        // 2. Busca o 'username' na sua tabela 'Perfis' onde o id é igual ao id do auth
         const { data, error } = await supabase
-          .from("Perfis") // Nome exato da sua tabela com P maiúsculo
+          .from("Perfis")
           .select("username")
           .eq("id", user.id)
-          .single(); // Traz apenas um único registro
+          .single();
 
         if (!error && data) {
           setUsername(data.username);
@@ -53,19 +51,27 @@ export default function Header() {
     <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 group">
-          <img 
-            src="/map-icon.svg" 
-            alt="SpotS" 
-            className="h-7 w-7 transition-transform duration-200 group-hover:scale-105" 
-          />
-          <span className="text-xl font-bold text-white tracking-tight transition-colors duration-200 group-hover:text-teal-400">
-            SpotS
-          </span>
-        </Link>
+        {/* Lado Esquerdo: Logo */}
+        <div className="flex-shrink-0">
+          <Link href="/" className="flex items-center gap-2 group">
+            <img 
+              src="/map-icon.svg" 
+              alt="SpotS" 
+              className="h-7 w-7 transition-transform duration-200 group-hover:scale-105" 
+            />
+            <span className="text-xl font-bold text-white tracking-tight transition-colors duration-200 group-hover:text-teal-400">
+              SpotS
+            </span>
+          </Link>
+        </div>
 
-        <nav className="flex items-center gap-1 sm:gap-2">
+        {/* 🎯 Centro Exato: Barra de Busca Inteligente */}
+        <div className="flex-1 flex justify-center mx-4 max-w-md">
+          <SearchInput />
+        </div>
+
+        {/* Lado Direito: Navegação e Controles */}
+        <nav className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {/* Link: Locais */}
           <Link
             href="/places"
@@ -75,7 +81,7 @@ export default function Header() {
             <span className="hidden sm:inline">Locais</span>
           </Link>
 
-          {/* Link: Perfil (Agora Dinâmico) */}
+          {/* Link: Perfil */}
           <Link
             href={username ? `/profile/${username}` : "#"}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
