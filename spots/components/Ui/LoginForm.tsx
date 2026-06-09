@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signin, signup } from '@/utils/supabase/auth';
-import toast from 'react-hot-toast'; // <-- AQUI ESTÁ A CORREÇÃO! A importação que faltava.
+import toast from 'react-hot-toast'; 
 
 export default function LoginForm() {
   const router = useRouter();
@@ -12,6 +12,7 @@ export default function LoginForm() {
   const [password, setPassword] = useState('');
   const [nome, setNome] = useState('');
   const [sobrenome, setSobrenome] = useState('');
+  const [username, setUsername] = useState(''); // <-- NOVO: Estado para o username
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,8 @@ export default function LoginForm() {
     if (isLogin) {
       result = await signin({ email, password });
     } else {
-      result = await signup({ email, password, nome, sobrenome });
+      // <-- NOVO: Enviando o username no payload
+      result = await signup({ email, password, nome, sobrenome, username }); 
     }
 
     if (result.success) {
@@ -47,6 +49,7 @@ export default function LoginForm() {
       setPassword('');
       setNome('');
       setSobrenome('');
+      setUsername(''); // <-- NOVO: Limpando o campo de username
       
       // Direciona para a página principal (raiz)
       router.push('/'); 
@@ -64,39 +67,63 @@ export default function LoginForm() {
         
         {/* NOVOS CAMPOS: Só aparecem se NÃO for tela de login (!isLogin) */}
         {!isLogin && (
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-            <div style={{ flex: 1 }}>
-              <label htmlFor="nome" style={{ display: 'block', marginBottom: '5px' }}>
-                Nome:
-              </label>
-              <input
-                id="nome"
-                type="text"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                required={!isLogin} // Só exige se for criar conta
-                placeholder="Seu nome"
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  borderRadius: '4px',
-                  border: '1px solid #ccc',
-                  boxSizing: 'border-box'
-                }}
-              />
+          <>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+              <div style={{ flex: 1 }}>
+                <label htmlFor="nome" style={{ display: 'block', marginBottom: '5px' }}>
+                  Nome:
+                </label>
+                <input
+                  id="nome"
+                  type="text"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  required={!isLogin} 
+                  placeholder="Seu nome"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <label htmlFor="sobrenome" style={{ display: 'block', marginBottom: '5px' }}>
+                  Sobrenome:
+                </label>
+                <input
+                  id="sobrenome"
+                  type="text"
+                  value={sobrenome}
+                  onChange={(e) => setSobrenome(e.target.value)}
+                  required={!isLogin} 
+                  placeholder="Seu sobrenome"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
             </div>
 
-            <div style={{ flex: 1 }}>
-              <label htmlFor="sobrenome" style={{ display: 'block', marginBottom: '5px' }}>
-                Sobrenome:
+            {/* <-- NOVO: Campo de Username ocupando a largura total --> */}
+            <div style={{ marginBottom: '15px' }}>
+              <label htmlFor="username" style={{ display: 'block', marginBottom: '5px' }}>
+                Nome de Usuário (Username):
               </label>
               <input
-                id="sobrenome"
+                id="username"
                 type="text"
-                value={sobrenome}
-                onChange={(e) => setSobrenome(e.target.value)}
-                required={!isLogin} // Só exige se for criar conta
-                placeholder="Seu sobrenome"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required={!isLogin}
+                placeholder="ex: joaosilva"
                 style={{
                   width: '100%',
                   padding: '8px',
@@ -106,7 +133,7 @@ export default function LoginForm() {
                 }}
               />
             </div>
-          </div>
+          </>
         )}
 
         <div style={{ marginBottom: '15px' }}>
