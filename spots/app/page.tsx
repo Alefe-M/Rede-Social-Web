@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Header from "@/components/Ui/Header";
 import { createClient } from "@/utils/supabase/client";
+import LikeButton from "@/components/Ui/likeButton"; // Componente importado com sucesso
+import { checkPostLikeStatus } from "@/app/actions/likes";
 
 // Tipagem alinhada estritamente com o seu banco de dados relacional
 interface Post {
@@ -324,10 +326,14 @@ export default function FeedPage() {
 
                     <p className="text-slate-700">{post.caption}</p>
 
+                    {/* Rodapé modificado para incluir o componente interativo LikeButton */}
                     <div className="flex items-center gap-5 border-t border-slate-200 pt-4 text-sm font-medium text-slate-600">
-                      <span>❤️ {post.likes} curtidas</span>
+                      
+                      {/* O LikeButton entra aqui substituindo o texto cru */}
+                      <LikeButton postId={post.postId} initialLikes={post.likes} currentUserId={myProfile?.id} />
+                      
                       <span>💬 {post.comments} comentários</span>
-                      <span>🔖 Salvar</span>
+                      <span className="cursor-pointer hover:text-slate-900 transition">🔖 Salvar</span>
                     </div>
                   </div>
                 </article>
