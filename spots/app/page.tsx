@@ -57,20 +57,8 @@ export default function FeedPage() {
   const [myProfile, setMyProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [newBio, setNewBio] = useState("");
-  
-  // 🎯 Estado para segurar o arquivo de imagem
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-
-  const [newPostData, setNewPostData] = useState({
-    nomelocal: "",
-    cidade: "",
-    estado: "",
-    caption: "",
-  });
 
   useEffect(() => {
     async function loadData() {
@@ -162,77 +150,7 @@ export default function FeedPage() {
   // HANDLERS (AÇÕES)
   // ==========================================
   
-  const handleCreatePost = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!myProfile) {
-      toast.error("Você precisa estar autenticado para criar uma publicação!");
-      return;
-    }
-
-    setIsUploading(true);
-    let finalImageUrl = null;
-
-    // 🎯 1. Se a pessoa escolheu uma foto, fazemos o upload pro Storage primeiro
-    if (selectedImage) {
-      // Limpa o nome do arquivo para não dar erro de caracteres
-      const fileExt = selectedImage.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${myProfile.id}/${fileName}`; // Guarda na pasta com ID do usuário
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('post_images')
-        .upload(filePath, selectedImage);
-
-      if (uploadError) {
-        setIsUploading(false);
-        toast.error("Erro ao fazer upload da imagem.");
-        return;
-      }
-
-      // Pega o link público da imagem que acabou de subir
-      const { data: publicUrlData } = supabase.storage
-        .from('post_images')
-        .getPublicUrl(filePath);
-
-      finalImageUrl = publicUrlData.publicUrl;
-    }
-
-    // 🎯 2. Salva o post no banco com a URL da imagem
-    const postToSave = {
-      userId: myProfile.id,
-      ...newPostData,
-      likes: 0,
-      comments: 0,
-      imagem_url: finalImageUrl, // Pode ser null se a pessoa não escolheu foto
-    };
-
-    const { data, error } = await supabase
-      .from("Posts")
-      .insert([postToSave])
-      .select(`
-        postId, created_at, userId, nomelocal, cidade, estado, caption, likes, comments, imagem_url,
-        Perfis (nome, sobrenome, username, avatar_url)
-      `);
-
-    if (error) {
-      toast.error("Erro ao salvar postagem: " + error.message);
-      setIsUploading(false);
-      return;
-    }
-
-    if (data && data[0]) {
-      const newPost = { ...data[0], isLiked: false } as unknown as Post;
-      setFeedPosts([newPost, ...feedPosts]);
-      toast.success("Postagem criada com sucesso!");
-    }
-
-    // Reset do modal
-    setIsModalOpen(false);
-    setIsUploading(false);
-    setSelectedImage(null);
-    setNewPostData({ nomelocal: "", cidade: "", estado: "", caption: "" });
-  };
+  
 
   const handleUpdateBio = async () => {
     if (!myProfile) return;
@@ -275,6 +193,14 @@ export default function FeedPage() {
     }
   };
 
+  const formatPostDate = (date: string) => {
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(date));
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-900">
       <Header />
@@ -283,21 +209,34 @@ export default function FeedPage() {
         
         <section className="space-y-6">
           
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between rounded-3xl border border-slate-800 bg-slate-900 p-6 text-white shadow-sm">
-            <div>
-              <h1 className="text-3xl font-bold">Descubra lugares através das pessoas</h1>
-              <p className="mt-3 max-w-2xl text-slate-300">
-                Veja fotos, experiências e recomendações compartilhadas por
-                usuários em locais comerciais próximos.
-              </p>
-            </div>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="whitespace-nowrap rounded-xl bg-teal-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-teal-400"
-            >
-              + Criar Post
-            </button>
-          </div>
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-8 text-white shadow-sm">
+
+  <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+
+    <div>
+      <span className="text-sm font-medium uppercase tracking-wider text-teal-400">
+        Comunidade Spots
+      </span>
+
+      <h1 className="mt-4 text-4xl font-bold leading-tight">
+        Olá, {myProfile?.nome || "Visitante"} 👋
+      </h1>
+
+      <p className="mt-3 max-w-xl text-lg text-slate-300">
+        Descubra novos lugares e compartilhe experiências reais.
+      </p>
+    </div>
+
+    <a
+    href="/create-post"
+    className="rounded-xl bg-teal-500 px-6 py-3 text-base font-semibold text-slate-950 transition hover:bg-teal-400"
+  >
+    ✨ Compartilhar Experiência
+  </a>
+
+  </div>
+
+</div>
 
           {searchQuery && (
             <div className="flex items-center justify-between rounded-xl bg-teal-500/10 p-4 border border-teal-500/20 text-slate-300">
@@ -310,114 +249,8 @@ export default function FeedPage() {
             </div>
           )}
 
-          {/* Modal de Nova Postagem */}
-          {isModalOpen && (
-            <div className="rounded-3xl border border-teal-500/30 bg-slate-900 p-6 shadow-md text-white">
-              <h2 className="mb-4 text-xl font-bold">Nova Postagem</h2>
-              <form onSubmit={handleCreatePost} className="space-y-4">
-                
-                {/* 🎯 INPUT DE IMAGEM ADICIONADO AQUI */}
-                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/50 p-4 text-center">
-                  <label className="cursor-pointer flex flex-col items-center justify-center gap-2">
-                    <ImageIcon className="text-slate-400" size={32} />
-                    <span className="text-sm font-medium text-slate-300">
-                      {selectedImage ? selectedImage.name : "Clique para anexar uma foto (Opcional)"}
-                    </span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          setSelectedImage(e.target.files[0]);
-                        }
-                      }}
-                    />
-                  </label>
-                  {selectedImage && (
-                    <button 
-                      type="button" 
-                      onClick={() => setSelectedImage(null)}
-                      className="mt-2 text-xs text-red-400 hover:text-red-300"
-                    >
-                      Remover foto
-                    </button>
-                  )}
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm text-slate-300">Nome do Local</label>
-                  <input
-                    type="text"
-                    value={newPostData.nomelocal}
-                    onChange={(e) => setNewPostData({ ...newPostData, nomelocal: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white focus:border-teal-500 focus:outline-none"
-                    placeholder="Ex: Café Aurora"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-sm text-slate-300">Cidade</label>
-                    <input
-                      type="text"
-                      value={newPostData.cidade}
-                      onChange={(e) => setNewPostData({ ...newPostData, cidade: e.target.value })}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white focus:border-teal-500 focus:outline-none"
-                      placeholder="Ex: Goiânia"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm text-slate-300">Estado (UF)</label>
-                    <input
-                      type="text"
-                      maxLength={2}
-                      value={newPostData.estado}
-                      onChange={(e) => setNewPostData({ ...newPostData, estado: e.target.value.toUpperCase() })}
-                      className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white focus:border-teal-500 focus:outline-none"
-                      placeholder="Ex: GO"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm text-slate-300">Sua experiência</label>
-                  <textarea
-                    value={newPostData.caption}
-                    onChange={(e) => setNewPostData({ ...newPostData, caption: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white focus:border-teal-500 focus:outline-none"
-                    placeholder="O que você achou desse lugar?"
-                    rows={3}
-                    required
-                  />
-                </div>
-
-                <div className="flex gap-3 justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setSelectedImage(null);
-                    }}
-                    className="rounded-xl px-4 py-2 font-medium text-slate-300 hover:bg-slate-800"
-                    disabled={isUploading}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isUploading}
-                    className="rounded-xl bg-teal-500 px-4 py-2 font-bold text-slate-950 hover:bg-teal-400 disabled:opacity-50"
-                  >
-                    {isUploading ? "Publicando..." : "Publicar"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
+            {/* Modal de Nova Postagem */}
+            
 
           {/* Listagem de Posts do Feed */}
           <div className="space-y-5">
@@ -433,17 +266,28 @@ export default function FeedPage() {
                   key={post.postId}
                   className="overflow-hidden rounded-3xl border border-slate-800 bg-white shadow-sm"
                 >
-                  <div className="flex items-center justify-between p-4">
+                  <div className="flex items-center justify-between p-5">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-700">
+                      <a
+                        href={post.Perfis?.username ? `/profile/${post.Perfis.username}` : "#"}
+                        className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 text-lg font-bold text-teal-700 transition hover:bg-teal-200"
+                      >
                         {post.Perfis?.nome ? post.Perfis.nome.charAt(0) : "U"}
-                      </div>
+                      </a>
+
                       <div>
-                        <span className="font-semibold text-slate-950">
-                          {post.Perfis ? `${post.Perfis.nome} ${post.Perfis.sobrenome}` : "Usuário SpotS"}
-                        </span>
+                        <a
+                          href={post.Perfis?.username ? `/profile/${post.Perfis.username}` : "#"}
+                          className="font-semibold text-slate-950 transition hover:text-teal-700"
+                        >
+                          {post.Perfis
+                            ? `${post.Perfis.nome} ${post.Perfis.sobrenome}`
+                            : "Usuário SpotS"}
+                        </a>
+
                         <p className="text-sm text-slate-500">
-                          {post.Perfis?.username ? `@${post.Perfis.username}` : "@usuario"}
+                          {post.Perfis?.username ? `@${post.Perfis.username}` : "@usuario"} ·{" "}
+                          {formatPostDate(post.created_at)}
                         </p>
                       </div>
                     </div>
@@ -451,7 +295,7 @@ export default function FeedPage() {
                     {myProfile?.id === post.userId && (
                       <button
                         onClick={() => handlePostDelete(post.postId)}
-                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                        className="rounded-full p-2 text-slate-300 transition-colors hover:bg-red-50 hover:text-red-500"
                         title="Excluir postagem"
                       >
                         <Trash2 size={18} />
@@ -459,26 +303,48 @@ export default function FeedPage() {
                     )}
                   </div>
 
-                  {/* 🎯 SE TIVER IMAGEM URL ELE MOSTRA, SE NÃO ELE MOSTRA A IMAGEM PADRÃO GENÉRICA */}
+                  <div className="border-y border-slate-100 bg-slate-50 px-5 py-3">
+
+                    <div className="mt-1 flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-semibold text-slate-950">
+                          📍 {post.nomelocal}
+                        </h2>
+
+                        <p className="text-sm text-slate-500">
+                          {post.cidade}, {post.estado}
+                        </p>
+                      </div>
+
+                      <span className="rounded-full bg-teal-100 px-2.5 py-1 text-[11px] font-medium text-teal-700">
+                        Experiência compartilhada
+                      </span>
+                    </div>
+                  </div>
+
                   <img
-                    src={post.imagem_url || "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=900&q=80"}
+                    src={
+                      post.imagem_url ||
+                      "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=900&q=80"
+                    }
                     alt={`Foto em ${post.nomelocal}`}
                     className="h-80 w-full object-cover"
                   />
 
-                  <div className="space-y-4 p-4">
+                  <div className="space-y-5 p-5">
                     <div>
-                      <span className="text-base font-bold text-teal-700">
-                        📍 {post.nomelocal}
-                      </span>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {post.cidade}, {post.estado}
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        Experiência
+                      </p>
+
+                      <p className="mt-2 text-base leading-relaxed text-slate-700">
+                        {post.caption}
                       </p>
                     </div>
 
-                    <p className="text-slate-700">{post.caption}</p>
-
-                    <CommentSection postId={post.postId} currentUserId={myProfile?.id} />
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <CommentSection postId={post.postId} currentUserId={myProfile?.id} />
+                    </div>
 
                     <div className="flex items-center gap-5 border-t border-slate-200 pt-4 text-sm font-medium text-slate-600">
                       <LikeButton
@@ -487,7 +353,10 @@ export default function FeedPage() {
                         initialIsLiked={post.isLiked}
                         currentUserId={myProfile?.id}
                       />
-                      <span className="cursor-pointer hover:text-slate-900 transition">🔖 Salvar</span>
+
+                      <span className="cursor-pointer transition hover:text-slate-900">
+                        🔖 Salvar
+                      </span>
                     </div>
                   </div>
                 </article>
@@ -500,64 +369,95 @@ export default function FeedPage() {
         <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
           
           {myProfile && (
-            <div className="rounded-3xl border border-slate-800 bg-white p-5 shadow-sm text-slate-900">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-700 text-lg">
-                  {myProfile.nome.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-950">
-                    {myProfile.nome} {myProfile.sobrenome}
-                  </h3>
-                  <p className="text-sm text-slate-500">@{myProfile.username}</p>
-                </div>
+          <div className="rounded-3xl border border-slate-800 bg-white p-5 shadow-sm text-slate-900">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-teal-100 text-xl font-bold text-teal-700">
+                {myProfile.nome.charAt(0)}
               </div>
 
-              <div className="mt-4 border-t border-slate-100 pt-3">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Sobre mim (Bio)
-                </p>
-
-                {isEditingBio ? (
-                  <div className="mt-2 space-y-2">
-                    <textarea
-                      value={newBio}
-                      onChange={(e) => setNewBio(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-slate-50 p-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none"
-                      rows={2}
-                      placeholder="Fale um pouco sobre você..."
-                    />
-                    <div className="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setIsEditingBio(false)}
-                        className="text-xs font-medium text-slate-500 hover:underline"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        onClick={handleUpdateBio}
-                        className="rounded-lg bg-teal-500 px-3 py-1 text-xs font-bold text-slate-950 hover:bg-teal-400"
-                      >
-                        Salvar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-1 flex items-start justify-between gap-2">
-                    <p className="text-sm text-slate-700 italic">
-                      {myProfile.bio || "Nenhuma biografia informada ainda."}
-                    </p>
-                    <button
-                      onClick={() => setIsEditingBio(true)}
-                      className="text-xs text-teal-600 hover:text-teal-700 font-medium shrink-0"
-                    >
-                      Editar
-                    </button>
-                  </div>
-                )}
+              <div className="min-w-0">
+                <h3 className="truncate text-lg font-bold text-slate-950">
+                  {myProfile.nome} {myProfile.sobrenome}
+                </h3>
+                <p className="text-sm text-slate-500">@{myProfile.username}</p>
               </div>
             </div>
-          )}
+
+            <div className="mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 p-3 text-center">
+              <div>
+                <p className="font-bold text-slate-950">1</p>
+                <p className="text-[11px] font-medium text-slate-500">post</p>
+              </div>
+
+              <div>
+                <p className="font-bold text-slate-950">1</p>
+                <p className="text-[11px] font-medium text-slate-500">seguidor</p>
+              </div>
+
+              <div>
+                <p className="font-bold text-slate-950">1</p>
+                <p className="text-[11px] font-medium text-slate-500">local</p>
+              </div>
+            </div>
+
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Bio
+                </p>
+
+                {!isEditingBio && (
+                  <button
+                    onClick={() => setIsEditingBio(true)}
+                    className="text-xs font-semibold text-teal-600 hover:text-teal-700"
+                  >
+                    Editar
+                  </button>
+                )}
+              </div>
+
+              {isEditingBio ? (
+                <div className="mt-3 space-y-3">
+                  <textarea
+                    value={newBio}
+                    onChange={(e) => setNewBio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-slate-50 p-3 text-sm text-slate-900 focus:border-teal-500 focus:outline-none"
+                    rows={3}
+                    placeholder="Fale um pouco sobre você..."
+                  />
+
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setIsEditingBio(false)}
+                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                    >
+                      Cancelar
+                    </button>
+
+                    <button
+                      onClick={handleUpdateBio}
+                      className="rounded-lg bg-teal-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-teal-400"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  {myProfile.bio ||
+                    "Conte um pouco sobre você e seus lugares favoritos."}
+                </p>
+              )}
+            </div>
+
+          <a
+            href={`/profile/${myProfile.username}`}
+            className="mt-5 block rounded-xl border border-slate-200 px-4 py-3 text-center text-sm font-bold text-slate-700 transition hover:border-teal-400 hover:bg-teal-50 hover:text-teal-700"
+          >
+            Ver Perfil
+          </a>
+        </div>
+      )}
 
           <div className="rounded-3xl border border-slate-800 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold text-slate-950">Locais em destaque</h2>

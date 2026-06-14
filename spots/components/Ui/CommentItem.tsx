@@ -91,13 +91,21 @@ export default function CommentItem({ comment, postId, currentUserId, onDelete }
 
   return (
     <div className="flex gap-2 py-2 items-start group">
-      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700 shrink-0 mt-0.5">
+      <a
+        href={`/profile/${comment.username}`}
+        className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-100 text-xs font-bold text-teal-700 shrink-0 mt-0.5 hover:bg-teal-200 transition-colors"
+      >
         {comment.username ? comment.username.charAt(0).toUpperCase() : 'U'}
-      </div>
+      </a>
       
       <div className="flex-1 text-sm">
         <p className="text-slate-700 leading-snug">
-          <span className="font-bold text-slate-900 mr-2">{comment.username}</span>
+          <a
+            href={`/profile/${comment.username}`}
+            className="font-bold text-slate-900 mr-2 hover:text-teal-600 transition-colors"
+          >
+            {comment.username}
+          </a>
           {comment.texto}
         </p>
         
