@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { toggleLike } from '@/app/actions/likes' 
 
 interface LikeButtonProps {
@@ -17,10 +17,16 @@ export default function LikeButton({
   currentUserId 
 }: LikeButtonProps) {
   
-  // CORREÇÃO: isLiked guarda um Booleano (true/false) e likesCount guarda o número total
-  const [isLiked, setIsLiked] = useState(initialIsLiked)
-  const [likesCount, setLikesCount] = useState(initialLikes) // Corrigido o erro de digitação aqui
+  // CORREÇÃO: Forçando o tipo boolean no useState e garantindo valor não-nulo
+  const [isLiked, setIsLiked] = useState<boolean>(initialIsLiked ?? false)
+  const [likesCount, setLikesCount] = useState<number>(initialLikes)
   const [isPending, startTransition] = useTransition()
+
+  // Sincroniza o estado interno se as props mudarem (ex: após refresh)
+  useEffect(() => {
+    setIsLiked(initialIsLiked ?? false)
+    setLikesCount(initialLikes)
+  }, [initialIsLiked, initialLikes])
 
   const handleLike = async () => {
     // Backup para o caso de erro
@@ -34,17 +40,18 @@ export default function LikeButton({
     startTransition(async () => {
       const result = await toggleLike(postId)
 
-      if (!result) {
+      if (!result || !result.success) {
         // Se falhar (ex: deslogado), reverte
         setIsLiked(previousIsLiked)
         setLikesCount(previousLikesCount)
-        alert('Você precisa estar logado para curtir!')
+        if (result && 'error' in result) alert(result.error)
+        else alert('Você precisa estar logado para curtir!')
         return
       }
 
-      // Garante o dado real vindo do banco (sua action deve retornar esses campos)
-      setIsLiked(result.isLiked)
-      setLikesCount(result.likesCount)
+      // Garante o dado real vindo do banco, forçando boolean
+      setIsLiked(!!result.isLiked)
+      setLikesCount(result.likesCount ?? 0)
     })
   }
 

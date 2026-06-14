@@ -1,30 +1,32 @@
 'use server'
+
 import { Post } from './spots'
-import { createClient } from '@/utils/supabase/client' // Ajuste o caminho se necessário
-import { SignInWithPasswordCredentials } from '@supabase/supabase-js'
+import { cookies } from 'next/headers'
+import { createClient } from '@/utils/supabase/server' // CORREÇÃO: Mudado para o arquivo do server
 
 export interface UserProfile {
-  id: string
-  username: string
-  fullName?: string      // maps to full_name
-  avatarUrl?: string     // maps to avatar_url
-  bio?: string
-  followersCount: number
-  followingCount: number
-  visitedSpotsCount: number
-  isFollowing: boolean   // Helper para o estado do botão no Front-end
+  id: string;
+  username: string;
+  fullName?: string;     
+  avatarUrl?: string;    
+  bio?: string;
+  followersCount: number;
+  followingCount: number;
+  visitedSpotsCount: number;
+  isFollowing: boolean;   
 }
-
-const supabase = createClient() // 🌟 Vazio! Ele já pega as chaves sozinho lá do client.ts
 
 // Busca os dados completos do perfil público de um usuário pelo 'username'
 export async function getProfileByUsername(username: string): Promise<UserProfile | null> {
+  const cookieStore = await cookies()
+  const supabase = await createClient()
+
   const { data: currentAuth } = await supabase.auth.getUser()
   const currentUserId = currentAuth?.user?.id
 
-  // 1. Busca os dados do perfil
+  // 1. CORREÇÃO: Alterado de 'perfis' para 'Perfis'
   const { data: profile, error } = await supabase
-    .from('perfis')
+    .from('Perfis')
     .select('*')
     .eq('username', username)
     .single()
@@ -34,23 +36,21 @@ export async function getProfileByUsername(username: string): Promise<UserProfil
     return null
   }
 
-  // 2. Conta seguidores e seguindo
-  const { count: followersCount } = await supabase.from('followers').select('*', { count: 'exact', head: true }).eq('following_id', profile.id)
-  const { count: followingCount } = await supabase.from('followers').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id)
+  // 2. CORREÇÃO: Ajustado para usar as tabelas reais do banco ('Seguidores' / 'Posts')
+  const { count: followersCount } = await supabase.from('Seguidores').select('*', { count: 'exact', head: true }).eq('seguindo_id', profile.id)
+  const { count: followingCount } = await supabase.from('Seguidores').select('*', { count: 'exact', head: true }).eq('seguidor_id', profile.id)
 
-  // 3. Conta quantos locais únicos esse usuário postou (Locais Visitados)
-  const { data: spots } = await supabase.from('spots').select('cidade_estado').eq('usuario_id', profile.id)
+  const { data: spots } = await supabase.from('Posts').select('cidade_estado').eq('usuario_id', profile.id)
   const uniqueLocations = new Set(spots?.map(s => s.cidade_estado) || [])
 
-  // 4. Verifica se o usuário logado atualmente segue este perfil
   let isFollowing = false
   if (currentUserId) {
     const { data: followCheck } = await supabase
-      .from('followers')
+      .from('Seguidores')
       .select('id')
-      .eq('follower_id', currentUserId)
-      .eq('following_id', profile.id)
-      .single()
+      .eq('seguidor_id', currentUserId)
+      .eq('seguindo_id', profile.id)
+      .maybeSingle()
     
     if (followCheck) isFollowing = true
   }
@@ -58,20 +58,24 @@ export async function getProfileByUsername(username: string): Promise<UserProfil
   return {
     id: profile.id,
     username: profile.username,
-    fullName: profile.full_name,
+    fullName: profile.nome + " " + profile.sobrenome,
     avatarUrl: profile.avatar_url,
     bio: profile.bio,
     followersCount: followersCount || 0,
     followingCount: followingCount || 0,
-    visitedSpotsCount: uniqueLocations.size, // Total de cidades/locais distintos
+    visitedSpotsCount: uniqueLocations.size,
     isFollowing
   }
 }
 
-// Busca apenas os posts criados por um usuário específico para preencher o feed do perfil
+// Busca apenas os posts criados por um usuário específico para o feed
 export async function getUserPosts(userId: string): Promise<Post[] | null> {
+  const cookieStore = await cookies()
+  const supabase = await createClient()
+
+  // CORREÇÃO: Alterado de 'spots' para 'Posts'
   const { data, error } = await supabase
-    .from('spots')
+    .from('Posts')
     .select('*')
     .eq('usuario_id', userId)
     .order('criado_em', { ascending: false })
@@ -94,33 +98,4 @@ export async function getUserPosts(userId: string): Promise<Post[] | null> {
     comments: item.comments,
     createdAt: item.criado_em
   }))
-}
-
-// Action para o botão Seguir / Deixar de Seguir (Toggle)
-export async function toggleFollow(targetUserId: string): Promise<{ success: boolean; action: 'followed' | 'unfollowed' } | null> {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return null
-
-  if (user.id === targetUserId) {
-    console.error('You cannot follow yourself')
-    return null
-  }
-
-  // Verifica se já segue
-  const { data: existingFollow } = await supabase
-    .from('followers')
-    .select('id')
-    .eq('follower_id', user.id)
-    .eq('following_id', targetUserId)
-    .maybeSingle()
-
-  if (existingFollow) {
-    // Se já segue, deleta o registro (Unfollow)
-    await supabase.from('followers').delete().eq('id', existingFollow.id)
-    return { success: true, action: 'unfollowed' }
-  } else {
-    // Se não segue, insere o registro (Follow)
-    await supabase.from('followers').insert([{ follower_id: user.id, following_id: targetUserId }])
-    return { success: true, action: 'followed' }
-  }
 }

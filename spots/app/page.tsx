@@ -5,6 +5,10 @@ import Header from "@/components/Ui/Header";
 import { createClient } from "@/utils/supabase/client";
 import LikeButton from "@/components/Ui/likeButton"; // Componente importado com sucesso
 import { checkPostLikeStatus } from "@/app/actions/likes";
+import CommentSection from "@/components/Ui/CommentSection";
+import { deletePost } from "@/app/actions/spots";
+import { Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 
 // Tipagem alinhada estritamente com o seu banco de dados relacional
 interface Post {
@@ -17,6 +21,7 @@ interface Post {
   caption: string;
   likes: number;
   comments: number;
+  isLiked?: boolean;
   Perfis: {
     nome: string;
     sobrenome: string;
@@ -62,7 +67,25 @@ export default function FeedPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        // 1. Busca posts trazendo os dados associados da tabela Perfis
+        // 1. Busca o Perfil do usuário atualmente logado
+        const { data: { user } } = await supabase.auth.getUser();
+        let currentUserId = "";
+
+        if (user) {
+          const { data: profileData, error: profileError } = await supabase
+            .from("Perfis")
+            .select("id, nome, sobrenome, username, bio")
+            .eq("id", user.id)
+            .single();
+
+          if (!profileError && profileData) {
+            setMyProfile(profileData as UserProfile);
+            setNewBio(profileData.bio || "");
+            currentUserId = profileData.id;
+          }
+        }
+
+        // 2. Busca posts trazendo os dados associados da tabela Perfis
         const { data: postsData, error: postsError } = await supabase
           .from("Posts")
           .select(`
@@ -85,22 +108,25 @@ export default function FeedPage() {
           .order("created_at", { ascending: false });
 
         if (!postsError && postsData) {
-          setFeedPosts(postsData as unknown as Post[]);
-        }
-
-        // 2. Busca o Perfil do usuário atualmente logado
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profileData, error: profileError } = await supabase
-            .from("Perfis")
-            .select("id, nome, sobrenome, username, bio")
-            .eq("id", user.id)
-            .single();
-
-          if (!profileError && profileData) {
-            setMyProfile(profileData as UserProfile);
-            setNewBio(profileData.bio || "");
+          // 3. Busca as curtidas do usuário logado para marcar o que já está curtido
+          let userLikes: string[] = [];
+          if (currentUserId) {
+            const { data: likesData } = await supabase
+              .from("Curtidas_Posts")
+              .select("post_id")
+              .eq("user_id", currentUserId);
+            
+            if (likesData) {
+              userLikes = likesData.map(l => l.post_id);
+            }
           }
+
+          const postsWithLikeStatus = (postsData as any[]).map(post => ({
+            ...post,
+            isLiked: userLikes.includes(post.postId)
+          }));
+
+          setFeedPosts(postsWithLikeStatus as Post[]);
         }
       } catch (err) {
         console.error("Erro ao carregar dados:", err);
@@ -158,7 +184,8 @@ export default function FeedPage() {
     }
 
     if (data && data[0]) {
-      setFeedPosts([data[0] as unknown as Post, ...feedPosts]);
+      const newPost = { ...data[0], isLiked: false } as unknown as Post;
+      setFeedPosts([newPost, ...feedPosts]);
     }
 
     setIsModalOpen(false);
@@ -179,6 +206,18 @@ export default function FeedPage() {
     } else {
       setMyProfile({ ...myProfile, bio: newBio });
       setIsEditingBio(false);
+    }
+  };
+
+  const handlePostDelete = async (postId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta postagem?")) return;
+
+    const result = await deletePost(postId);
+    if (result.success) {
+      toast.success("Postagem excluída!");
+      setFeedPosts((prev) => prev.filter((p) => p.postId !== postId));
+    } else {
+      toast.error(result.error || "Erro ao excluir");
     }
   };
 
@@ -293,19 +332,31 @@ export default function FeedPage() {
                   key={post.postId}
                   className="overflow-hidden rounded-3xl border border-slate-800 bg-white shadow-sm"
                 >
-                  <div className="flex items-center gap-3 p-4">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-700">
-                      {post.Perfis?.nome ? post.Perfis.nome.charAt(0) : "U"}
+                  <div className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-100 font-bold text-teal-700">
+                        {post.Perfis?.nome ? post.Perfis.nome.charAt(0) : "U"}
+                      </div>
+
+                      <div>
+                        <span className="font-semibold text-slate-950">
+                          {post.Perfis ? `${post.Perfis.nome} ${post.Perfis.sobrenome}` : "Usuário SpotS"}
+                        </span>
+                        <p className="text-sm text-slate-500">
+                          {post.Perfis?.username ? `@${post.Perfis.username}` : "@usuario"}
+                        </p>
+                      </div>
                     </div>
 
-                    <div>
-                      <span className="font-semibold text-slate-950">
-                        {post.Perfis ? `${post.Perfis.nome} ${post.Perfis.sobrenome}` : "Usuário SpotS"}
-                      </span>
-                      <p className="text-sm text-slate-500">
-                        {post.Perfis?.username ? `@${post.Perfis.username}` : "@usuario"}
-                      </p>
-                    </div>
+                    {myProfile?.id === post.userId && (
+                      <button
+                        onClick={() => handlePostDelete(post.postId)}
+                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                        title="Excluir postagem"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
                   </div>
 
                   <img
@@ -326,13 +377,19 @@ export default function FeedPage() {
 
                     <p className="text-slate-700">{post.caption}</p>
 
+                    <CommentSection postId={post.postId} currentUserId={myProfile?.id} />
+
                     {/* Rodapé modificado para incluir o componente interativo LikeButton */}
                     <div className="flex items-center gap-5 border-t border-slate-200 pt-4 text-sm font-medium text-slate-600">
                       
                       {/* O LikeButton entra aqui substituindo o texto cru */}
-                      <LikeButton postId={post.postId} initialLikes={post.likes} currentUserId={myProfile?.id} />
+                      <LikeButton 
+                        postId={post.postId} 
+                        initialLikes={post.likes} 
+                        initialIsLiked={post.isLiked}
+                        currentUserId={myProfile?.id} 
+                      />
                       
-                      <span>💬 {post.comments} comentários</span>
                       <span className="cursor-pointer hover:text-slate-900 transition">🔖 Salvar</span>
                     </div>
                   </div>

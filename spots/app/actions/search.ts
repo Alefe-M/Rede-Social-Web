@@ -45,7 +45,7 @@ export async function searchSpotsAndUsers(searchTerm: string) {
 
   try {
     const cookieStore = await cookies()
-    const supabase = createClient(cookieStore)
+    const supabase = await createClient()
 
     const searchOnlyUsers = cleanTerm.startsWith('@')
 

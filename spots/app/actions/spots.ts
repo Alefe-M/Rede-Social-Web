@@ -1,34 +1,34 @@
 'use server'
-import { createClient } from '@supabase/supabase-js'
+
+import { cookies } from 'next/headers' // 1. IMPORTANTE: Importar os cookies do Next.js
+import { createClient } from '@/utils/supabase/server' 
 
 export interface Post {
   id?: string
   userId: string        
   username?: string      
   avatarUrl?: string    
-  location: string      // cidade_estado
-  place: string         // endereco_detalhado (Nome do local/endereço digitado)
-  category: string      // categoria
-  imageUrl: string      // imagem_url 
-  content: string       // conteudo 
-  rating: number        // nota (🌟 Nova propriedade de 1 a 5 estrelas)
+  location: string      
+  place: string         
+  category: string      
+  imageUrl: string      
+  content: string       
+  rating: number        
   likes: number
   comments: number
-  createdAt?: string    // criado_em
+  createdAt?: string    
 }
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-)
 
 // ==========================================
 // Getters
 // ==========================================
 
 export async function getPosts(): Promise<Post[] | null> {
+  const cookieStore = await cookies() // 2. Pega os cookies do navegador
+  const supabase = await createClient() // 3. Passa os cookies aqui (sem o await antes do createClient)
+
   const { data, error } = await supabase
-    .from('spots') 
+    .from('Posts') 
     .select('*')
     .order('criado_em', { ascending: false }) 
 
@@ -45,7 +45,7 @@ export async function getPosts(): Promise<Post[] | null> {
     category: item.categoria,
     imageUrl: item.imagem_url,
     content: item.conteudo,
-    rating: item.nota || 5, // Garante um fallback caso a coluna esteja nula
+    rating: item.nota || 5, 
     likes: item.likes,
     comments: item.comments,
     createdAt: item.criado_em
@@ -53,8 +53,11 @@ export async function getPosts(): Promise<Post[] | null> {
 }
 
 export async function getPostById(id: string): Promise<Post | null> {
+  const cookieStore = await cookies()
+  const supabase = await createClient()
+
   const { data, error } = await supabase
-    .from('spots')
+    .from('Posts')
     .select('*')
     .eq('id', id)
     .single()
@@ -84,6 +87,8 @@ export async function getPostById(id: string): Promise<Post | null> {
 // ==========================================
 
 export async function createPost(newPost: Omit<Post, 'userId' | 'likes' | 'comments'>): Promise<Post | null> {
+  const cookieStore = await cookies()
+  const supabase = await createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
   if (authError || !user) {
@@ -97,14 +102,14 @@ export async function createPost(newPost: Omit<Post, 'userId' | 'likes' | 'comme
     cidade_estado: newPost.location,
     conteudo: newPost.content,   
     imagem_url: newPost.imageUrl, 
-    nota: newPost.rating,         // 🌟 Enviando a nota para a coluna do banco
+    nota: newPost.rating,         
     usuario_id: user.id, 
     likes: 0,
     comments: 0
   }
 
   const { data, error } = await supabase
-    .from('spots')
+    .from('Posts')
     .insert([dbRow])
     .select()
     .single()
@@ -130,16 +135,19 @@ export async function createPost(newPost: Omit<Post, 'userId' | 'likes' | 'comme
 }
 
 export async function updatePost(id: string, updates: Partial<Post>): Promise<Post | null> {
+  const cookieStore = await cookies()
+  const supabase = await createClient()
+  
   const dbUpdates: any = {}
   if (updates.place !== undefined) dbUpdates.endereco_detalhado = updates.place
   if (updates.category !== undefined) dbUpdates.categoria = updates.category
   if (updates.location !== undefined) dbUpdates.cidade_estado = updates.location
   if (updates.content !== undefined) dbUpdates.conteudo = updates.content
   if (updates.imageUrl !== undefined) dbUpdates.imagem_url = updates.imageUrl
-  if (updates.rating !== undefined) dbUpdates.nota = updates.rating // Permite atualizar a nota
+  if (updates.rating !== undefined) dbUpdates.nota = updates.rating 
 
   const { data, error } = await supabase
-    .from('spots')
+    .from('Posts')
     .update(dbUpdates)
     .eq('id', id)
     .select()
@@ -165,26 +173,55 @@ export async function updatePost(id: string, updates: Partial<Post>): Promise<Po
   }
 }
 
+import { revalidatePath } from 'next/cache'
+
+// ... existing code ...
+
 // ==========================================
 // Delete
 // ==========================================
 
-export async function deletePost(id: string): Promise<boolean> {
+export async function deletePost(id: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return { success: false, error: 'Não autenticado' }
+
+  // Verifica se o post pertence ao usuário
+  const { data: post, error: fetchError } = await supabase
+    .from('Posts')
+    .select('userId')
+    .eq('postId', id)
+    .single()
+
+  if (fetchError || !post) {
+    return { success: false, error: 'Postagem não encontrada' }
+  }
+
+  if (post.userId !== user.id) {
+    return { success: false, error: 'Não autorizado' }
+  }
+  
   const { error } = await supabase
-    .from('spots')
+    .from('Posts')
     .delete()
-    .eq('id', id)
+    .eq('postId', id)
 
   if (error) {
     console.error(`Error deleting post ${id}: `, error.message)
-    return false
+    return { success: false, error: 'Erro ao deletar postagem' }
   }
-  return true
+
+  revalidatePath('/')
+  return { success: true }
 }
 
 export async function getPostsWithProfiles(): Promise<Post[] | null> {
+  const cookieStore = await cookies()
+  const supabase = await createClient()
+
   const { data, error } = await supabase
-    .from('spots')
+    .from('Posts')
     .select(`
       id,
       cidade_estado,
@@ -197,7 +234,7 @@ export async function getPostsWithProfiles(): Promise<Post[] | null> {
       comments,
       criado_em,
       usuario_id,
-      perfis (
+      Perfis (
         username,
         avatar_url
       )
@@ -221,7 +258,7 @@ export async function getPostsWithProfiles(): Promise<Post[] | null> {
     likes: item.likes,
     comments: item.comments,
     createdAt: item.criado_em,
-    username: item.perfis?.username,
-    avatarUrl: item.perfis?.avatar_url
+    username: item.Perfis?.username,
+    avatarUrl: item.Perfis?.avatar_url
   }))
 }

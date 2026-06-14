@@ -14,6 +14,7 @@ interface ProfileData {
   avatar_url: string | null;
 }
 
+// CORREÇÃO: Tipagem atualizada para bater com as colunas reais do banco
 interface Post {
   postId: string;
   created_at: string;
@@ -40,13 +41,17 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   
-  // Estados para controle de dono do perfil e edição de bio
   const [isOwner, setIsOwner] = useState(false);
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioInput, setBioInput] = useState("");
 
   useEffect(() => {
-    if (!usernameUrl) return;
+    // Alerta caso a pasta não esteja configurada como [username]
+    if (!usernameUrl) {
+      console.error("Username não encontrado na URL. Certifique-se de que a pasta está como app/profile/[username]/page.tsx");
+      setLoading(false);
+      return;
+    }
 
     async function loadProfileData() {
       try {
@@ -58,7 +63,7 @@ export default function ProfilePage() {
           .single();
 
         if (profileError || !profileData) {
-          console.error("Perfil não encontrado");
+          console.error("Perfil não encontrado:", profileError?.message);
           setLoading(false);
           return;
         }
@@ -72,7 +77,7 @@ export default function ProfilePage() {
           setIsOwner(true);
         }
 
-        // 3. Busca as postagens reais deste usuário específico
+        // 3. CORREÇÃO: Selecionando as colunas CORRETAS que existem no seu banco
         const { data: postsData, error: postsError } = await supabase
           .from("Posts")
           .select("postId, created_at, nomelocal, cidade, estado, caption, likes, comments")
@@ -80,10 +85,12 @@ export default function ProfilePage() {
           .order("created_at", { ascending: false });
 
         if (!postsError && postsData) {
-          setUserPosts(postsData as Post[]);
+          setUserPosts(postsData as unknown as Post[]);
+        } else if (postsError) {
+          console.error("Erro ao buscar posts:", postsError.message);
         }
 
-        // 4. Busca a contagem real de seguidores na tabela Seguidores
+        // 4. Busca a contagem de seguidores
         const { count, error: followersError } = await supabase
           .from("Seguidores")
           .select("*", { count: "exact", head: true })
@@ -103,7 +110,6 @@ export default function ProfilePage() {
     loadProfileData();
   }, [usernameUrl]);
 
-  // Função para salvar a nova biografia no banco
   const handleSaveBio = async () => {
     if (!profile) return;
 
@@ -120,7 +126,7 @@ export default function ProfilePage() {
     }
   };
 
-  // Gera a lista lateral de locais visitados dinamicamente com base nos posts do usuário
+  // CORREÇÃO: Mapeando baseado na coluna correta do banco
   const visitedPlaces: VisitedPlace[] = Array.from(
     new Set(userPosts.map((p) => p.nomelocal))
   ).map((name) => {
@@ -151,28 +157,25 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-900">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
       <Header />
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 text-white shadow-sm">
           <div className="flex flex-col gap-6 md:flex-row md:items-center">
             
-            {/* Avatar com a Inicial do Nome */}
             <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full bg-teal-100 text-4xl font-bold text-teal-700 shadow-inner">
-              {profile.nome.charAt(0)}
+              {profile.nome ? profile.nome.charAt(0) : "?"}
             </div>
 
             <div className="flex-1 space-y-1">
               <p className="text-sm font-semibold text-teal-300">Perfil de usuário</p>
 
-              {/* Nome, Sobrenome e Username vindos do Banco */}
               <h1 className="text-4xl font-bold tracking-tight">
                 {profile.nome} {profile.sobrenome}
               </h1>
               <p className="text-slate-400">@{profile.username}</p>
 
-              {/* Bloco da Biografia (Texto ou Modo de Edição) */}
               <div className="pt-2">
                 {isEditingBio ? (
                   <div className="mt-2 space-y-2 max-w-2xl">
@@ -189,7 +192,7 @@ export default function ProfilePage() {
                           setIsEditingBio(false);
                           setBioInput(profile.bio || "");
                         }}
-                        className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-850"
+                        className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800"
                       >
                         Cancelar
                       </button>
@@ -208,7 +211,6 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* Contadores Atualizados Dinamicamente */}
               <div className="mt-5 flex flex-wrap gap-3 pt-2">
                 <span className="rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-slate-300 border border-slate-800">
                   {userPosts.length} {userPosts.length === 1 ? "publicação" : "publicações"}
@@ -222,7 +224,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Ação Condicional: Se for o dono, Edita. Se for outro usuário, Segue */}
             {isOwner ? (
               <button
                 onClick={() => setIsEditingBio(!isEditingBio)}
@@ -245,7 +246,6 @@ export default function ProfilePage() {
               <h2 className="text-2xl font-bold text-white">Experiências compartilhadas</h2>
             </div>
 
-            {/* Listagem de Posts Reais do Usuário */}
             {userPosts.length === 0 ? (
               <div className="text-center py-16 rounded-3xl border border-dashed border-slate-800 text-slate-500">
                 📍 Nenhuma publicação realizada por este perfil ainda.
@@ -258,13 +258,14 @@ export default function ProfilePage() {
                     className="overflow-hidden rounded-3xl border border-slate-800 bg-white shadow-sm flex flex-col justify-between"
                   >
                     <div>
+                      {/* CORREÇÃO: Usando um placeholder já que imagem_url não foi mapeada no select */}
                       <img
                         src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=900&q=80"
                         alt={post.nomelocal}
                         className="h-56 w-full object-cover"
                       />
 
-                      <div className="space-y-3 p-4">
+                      <div className="space-y-3 p-4 text-slate-900">
                         <span className="font-bold text-teal-700 block">
                           📍 {post.nomelocal}
                         </span>
@@ -286,7 +287,6 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* Sidebar lateral montada de forma inteligente */}
           <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
             <div className="rounded-3xl bg-white p-5 shadow-sm">
               <h2 className="text-xl font-bold text-slate-950">Locais visitados</h2>
