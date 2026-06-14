@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Header from "@/components/Ui/Header";
 import { createClient } from "@/utils/supabase/client";
+import toast from "react-hot-toast";
+import { Trash2 } from "lucide-react"; // 🎯 Ícone de lixeira adicionado
 
 interface ProfileData {
   id: string;
@@ -14,7 +16,6 @@ interface ProfileData {
   avatar_url: string | null;
 }
 
-// CORREÇÃO: Tipagem atualizada para bater com as colunas reais do banco
 interface Post {
   postId: string;
   created_at: string;
@@ -24,6 +25,7 @@ interface Post {
   caption: string;
   likes: number;
   comments: number;
+  imagem_url?: string; // 🎯 Coluna de imagem adicionada
 }
 
 interface VisitedPlace {
@@ -41,21 +43,21 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [loading, setLoading] = useState(true);
   
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+  
   const [isEditingBio, setIsEditingBio] = useState(false);
   const [bioInput, setBioInput] = useState("");
 
   useEffect(() => {
-    // Alerta caso a pasta não esteja configurada como [username]
     if (!usernameUrl) {
-      console.error("Username não encontrado na URL. Certifique-se de que a pasta está como app/profile/[username]/page.tsx");
       setLoading(false);
       return;
     }
 
     async function loadProfileData() {
       try {
-        // 1. Busca os dados do perfil pelo username da URL
         const { data: profileData, error: profileError } = await supabase
           .from("Perfis")
           .select("id, nome, sobrenome, username, bio, avatar_url")
@@ -63,7 +65,6 @@ export default function ProfilePage() {
           .single();
 
         if (profileError || !profileData) {
-          console.error("Perfil não encontrado:", profileError?.message);
           setLoading(false);
           return;
         }
@@ -71,37 +72,43 @@ export default function ProfilePage() {
         setProfile(profileData as ProfileData);
         setBioInput(profileData.bio || "");
 
-        // 2. Verifica se este perfil pertence ao usuário atualmente logado
         const { data: { user: currentUser } } = await supabase.auth.getUser();
-        if (currentUser && currentUser.id === profileData.id) {
-          setIsOwner(true);
+        
+        if (currentUser) {
+          setCurrentUserId(currentUser.id);
+          
+          if (currentUser.id === profileData.id) {
+            setIsOwner(true);
+          } else {
+            const { data: followData } = await supabase
+              .from("Seguidores")
+              .select("id")
+              .eq("seguidor_id", currentUser.id)
+              .eq("seguindo_id", profileData.id)
+              .single();
+
+            if (followData) setIsFollowing(true);
+          }
         }
 
-        // 3. CORREÇÃO: Selecionando as colunas CORRETAS que existem no seu banco
+        // 🎯 Buscando a imagem_url junto com o resto dos dados
         const { data: postsData, error: postsError } = await supabase
           .from("Posts")
-          .select("postId, created_at, nomelocal, cidade, estado, caption, likes, comments")
+          .select("postId, created_at, nomelocal, cidade, estado, caption, likes, comments, imagem_url")
           .eq("userId", profileData.id)
           .order("created_at", { ascending: false });
 
-        if (!postsError && postsData) {
-          setUserPosts(postsData as unknown as Post[]);
-        } else if (postsError) {
-          console.error("Erro ao buscar posts:", postsError.message);
-        }
+        if (!postsError && postsData) setUserPosts(postsData as unknown as Post[]);
 
-        // 4. Busca a contagem de seguidores
         const { count, error: followersError } = await supabase
           .from("Seguidores")
           .select("*", { count: "exact", head: true })
           .eq("seguindo_id", profileData.id);
 
-        if (!followersError && count !== null) {
-          setFollowersCount(count);
-        }
+        if (!followersError && count !== null) setFollowersCount(count);
 
       } catch (err) {
-        console.error("Erro geral ao carregar perfil:", err);
+        console.error("Erro ao carregar perfil:", err);
       } finally {
         setLoading(false);
       }
@@ -112,26 +119,74 @@ export default function ProfilePage() {
 
   const handleSaveBio = async () => {
     if (!profile) return;
-
     const { error } = await supabase
       .from("Perfis")
       .update({ bio: bioInput })
       .eq("id", profile.id);
 
     if (error) {
-      alert("Erro ao atualizar biografia: " + error.message);
+      toast.error("Erro ao atualizar biografia.");
     } else {
       setProfile({ ...profile, bio: bioInput });
       setIsEditingBio(false);
+      toast.success("Biografia atualizada!");
     }
   };
 
-  // CORREÇÃO: Mapeando baseado na coluna correta do banco
+  const toggleFollow = async () => {
+    if (!currentUserId || !profile) {
+      toast.error("Você precisa estar logado para seguir alguém.");
+      return;
+    }
+
+    if (isFollowing) {
+      const { error } = await supabase
+        .from("Seguidores")
+        .delete()
+        .eq("seguidor_id", currentUserId)
+        .eq("seguindo_id", profile.id);
+
+      if (!error) {
+        setIsFollowing(false);
+        setFollowersCount((prev) => prev - 1);
+        toast.success(`Você deixou de seguir ${profile.nome}`);
+      }
+    } else {
+      const { error } = await supabase
+        .from("Seguidores")
+        .insert([{ seguidor_id: currentUserId, seguindo_id: profile.id }]);
+
+      if (!error) {
+        setIsFollowing(true);
+        setFollowersCount((prev) => prev + 1);
+        toast.success(`Você agora segue ${profile.nome}`);
+      }
+    }
+  };
+
+  // 🎯 Lógica para excluir o post direto da página de perfil
+  const handlePostDelete = async (postId: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta postagem?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("Posts")
+        .delete()
+        .eq("postId", postId);
+
+      if (error) throw error;
+
+      toast.success("Postagem excluída com sucesso!");
+      setUserPosts((prev) => prev.filter((p) => p.postId !== postId));
+    } catch (err) {
+      console.error("Erro ao excluir:", err);
+      toast.error("Erro ao excluir postagem. Verifique sua conexão.");
+    }
+  };
+
   const visitedPlaces: VisitedPlace[] = Array.from(
     new Set(userPosts.map((p) => p.nomelocal))
-  ).map((name) => {
-    return { name, category: "Local Registrado" };
-  });
+  ).map((name) => ({ name, category: "Local Registrado" }));
 
   if (loading) {
     return (
@@ -232,10 +287,18 @@ export default function ProfilePage() {
                 {isEditingBio ? "Fechando..." : "Editar Bio"}
               </button>
             ) : (
-              <button className="rounded-2xl bg-teal-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-teal-400 self-start md:self-center">
-                Seguir
+              <button 
+                onClick={toggleFollow}
+                className={`rounded-2xl px-5 py-3 font-bold transition self-start md:self-center ${
+                  isFollowing 
+                    ? "border border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800" 
+                    : "bg-teal-500 text-slate-950 hover:bg-teal-400"
+                }`}
+              >
+                {isFollowing ? "Seguindo" : "Seguir"}
               </button>
             )}
+
           </div>
         </section>
 
@@ -258,20 +321,32 @@ export default function ProfilePage() {
                     className="overflow-hidden rounded-3xl border border-slate-800 bg-white shadow-sm flex flex-col justify-between"
                   >
                     <div>
-                      {/* CORREÇÃO: Usando um placeholder já que imagem_url não foi mapeada no select */}
+                      {/* 🎯 Imagem real renderizada aqui (ou a padrão caso não tenha enviado) */}
                       <img
-                        src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=900&q=80"
+                        src={post.imagem_url || "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=900&q=80"}
                         alt={post.nomelocal}
                         className="h-56 w-full object-cover"
                       />
 
                       <div className="space-y-3 p-4 text-slate-900">
-                        <span className="font-bold text-teal-700 block">
-                          📍 {post.nomelocal}
-                        </span>
-                        <p className="text-xs text-slate-400 -mt-2">
-                          {post.cidade}, {post.estado}
-                        </p>
+                        
+                        {/* 🎯 Título e botão de lixeira flexíveis */}
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-bold text-teal-700 block">📍 {post.nomelocal}</span>
+                            <p className="text-xs text-slate-400 mt-0.5">{post.cidade}, {post.estado}</p>
+                          </div>
+                          
+                          {isOwner && (
+                            <button
+                              onClick={() => handlePostDelete(post.postId)}
+                              className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                              title="Excluir postagem"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
 
                         <p className="text-slate-700 text-sm leading-relaxed">{post.caption}</p>
                       </div>

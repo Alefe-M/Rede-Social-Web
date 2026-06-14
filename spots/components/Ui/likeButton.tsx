@@ -1,58 +1,90 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
-import { toggleLike } from '@/app/actions/likes' 
+import { useState, useEffect } from 'react'
+import { createClient } from '@/utils/supabase/client' // 🎯 Usando o client do navegador!
+import toast from 'react-hot-toast'
 
 interface LikeButtonProps {
   postId: string;
-  initialLikes: number;         // Total de likes que o post já tem
-  initialIsLiked?: boolean;     // NOVO: Para o botão saber se o usuário logado já curtiu esse post
+  initialLikes: number;
+  initialIsLiked?: boolean;
   currentUserId?: string;       
 }
 
 export default function LikeButton({ 
   postId, 
   initialLikes, 
-  initialIsLiked = false, // Padrão é falso caso não seja enviado
+  initialIsLiked = false,
   currentUserId 
 }: LikeButtonProps) {
   
-  // CORREÇÃO: Forçando o tipo boolean no useState e garantindo valor não-nulo
+  const supabase = createClient()
   const [isLiked, setIsLiked] = useState<boolean>(initialIsLiked ?? false)
   const [likesCount, setLikesCount] = useState<number>(initialLikes)
-  const [isPending, startTransition] = useTransition()
+  const [isPending, setIsPending] = useState(false)
 
-  // Sincroniza o estado interno se as props mudarem (ex: após refresh)
   useEffect(() => {
     setIsLiked(initialIsLiked ?? false)
     setLikesCount(initialLikes)
   }, [initialIsLiked, initialLikes])
 
   const handleLike = async () => {
-    // Backup para o caso de erro
+    if (!currentUserId) {
+      toast.error("Você precisa estar logado para curtir.")
+      return
+    }
+
+    if (isPending) return
+    setIsPending(true)
+
+    // Backup visual
     const previousIsLiked = isLiked
     const previousLikesCount = likesCount
 
-    // Atualização otimista (instantânea na tela)
+    // Atualização otimista na tela (instantâneo)
     setIsLiked(!isLiked)
     setLikesCount((prev) => (isLiked ? prev - 1 : prev + 1))
 
-    startTransition(async () => {
-      const result = await toggleLike(postId)
-
-      if (!result || !result.success) {
-        // Se falhar (ex: deslogado), reverte
-        setIsLiked(previousIsLiked)
-        setLikesCount(previousLikesCount)
-        if (result && 'error' in result) alert(result.error)
-        else alert('Você precisa estar logado para curtir!')
-        return
+    try {
+      if (isLiked) {
+        // Já curtia, vamos deletar
+        await supabase
+          .from('Curtidas_Posts')
+          .delete()
+          .eq('post_id', postId)
+          .eq('user_id', currentUserId)
+      } else {
+        // Não curtia, vamos inserir
+        await supabase
+          .from('Curtidas_Posts')
+          .insert({ post_id: postId, user_id: currentUserId })
       }
 
-      // Garante o dado real vindo do banco, forçando boolean
-      setIsLiked(!!result.isLiked)
-      setLikesCount(result.likesCount ?? 0)
-    })
+      // Conta o total real no banco
+      const { count } = await supabase
+        .from('Curtidas_Posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', postId)
+
+      const totalLikes = count || 0
+
+      // Salva no post
+      await supabase
+        .from('Posts')
+        .update({ likes: totalLikes })
+        .eq('postId', postId)
+
+      // Garante a sincronia final
+      setLikesCount(totalLikes)
+
+    } catch (err) {
+      // Se a internet falhar
+      setIsLiked(previousIsLiked)
+      setLikesCount(previousLikesCount)
+      toast.error("Erro ao curtir a publicação.")
+    } finally {
+      setIsPending(false)
+    }
   }
 
   return (
@@ -61,12 +93,9 @@ export default function LikeButton({
       disabled={isPending}
       className={`flex items-center gap-1 transition-transform active:scale-110 ${
         isLiked ? 'text-red-500 font-bold' : 'text-slate-600 hover:text-red-500'
-      }`}
+      } ${isPending ? 'opacity-50' : ''}`}
     >
-      {/* Troca entre o coração cheio e vazio dependendo do estado */}
       <span>{isLiked ? '❤️' : '🤍'}</span>
-      
-      {/* Pluralização simples: 1 curtida / 2 curtidas */}
       <span>
         {likesCount} {likesCount === 1 ? 'curtida' : 'curtidas'}
       </span>
